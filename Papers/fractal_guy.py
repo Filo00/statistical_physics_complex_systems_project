@@ -237,6 +237,7 @@ def mandelbulb(N=40, max_iter=10, threshold=8, power=8):
     bulb_points = points[mask]
     return bulb_points
 
+# --- Volumetric Mandelbulb ---
 def mandelbulb_volume(N=40, power=8, max_iter=12, threshold=8):
     xs = np.linspace(-1.3, 1.3, N)
     ys = np.linspace(-1.3, 1.3, N)
@@ -264,8 +265,50 @@ def mandelbulb_volume(N=40, power=8, max_iter=12, threshold=8):
                 values[i,j,k] = it
     return values
 
-# --- Metodi di stima ---
+# --- Volumetric Julia 3D ---
+def julia3d_volume(N=40, c=(0.355,0.355,0.355), max_iter=12, threshold=8):
+    xs = np.linspace(-1.5,1.5,N)
+    ys = np.linspace(-1.5,1.5,N)
+    zs = np.linspace(-1.5,1.5,N)
+    X, Y, Z = np.meshgrid(xs, ys, zs, indexing='ij')
+    values = np.zeros_like(X, dtype=np.uint8)
+    for i in range(N):
+        for j in range(N):
+            for k in range(N):
+                zx, zy, zz = X[i,j,k], Y[i,j,k], Z[i,j,k]
+                for it in range(max_iter):
+                    xtemp = zx*zx - zy*zy - zz*zz + c[0]
+                    ytemp = 2*zx*zy + c[1]
+                    ztemp = 2*zx*zz + c[2]
+                    zx, zy, zz = xtemp, ytemp, ztemp
+                    if zx*zx + zy*zy + zz*zz > threshold:
+                        break
+                values[i,j,k] = it
+    return values
 
+# --- Volumetric Mandelbrot 3D ---
+def mandelbrot3d_volume(N=40, max_iter=12, threshold=8):
+    xs = np.linspace(-2.0, 1.0, N)
+    ys = np.linspace(-1.5, 1.5, N)
+    zs = np.linspace(-1.5, 1.5, N)
+    X, Y, Z = np.meshgrid(xs, ys, zs, indexing='ij')
+    values = np.zeros_like(X, dtype=np.uint8)
+    for i in range(N):
+        for j in range(N):
+            for k in range(N):
+                zx, zy, zz = 0.0, 0.0, 0.0
+                cx, cy, cz = X[i,j,k], Y[i,j,k], Z[i,j,k]
+                for it in range(max_iter):
+                    xtemp = zx*zx - zy*zy - zz*zz + cx
+                    ytemp = 2*zx*zy + cy
+                    ztemp = 2*zx*zz + cz
+                    zx, zy, zz = xtemp, ytemp, ztemp
+                    if zx*zx + zy*zy + zz*zz > threshold:
+                        break
+                values[i,j,k] = it
+    return values
+
+# --- Metodi di stima ---
 def box_counting(data, box_sizes, plot=True):
     data = np.asarray(data)
     if data.ndim == 1:
@@ -348,27 +391,26 @@ class VolumetricFractalWindow(tk.Toplevel):
     def __init__(self, master=None):
         super().__init__(master)
         self.title("Rendering Volumetrico Frattale 3D")
-        self.geometry("400x350")
+        self.geometry("430x420")
         self.resizable(False, False)
 
+        self.fractal_types = ["Mandelbulb", "Julia 3D", "Mandelbrot 3D"]
+        self.fractal_var = tk.StringVar(value=self.fractal_types[0])
         self.N_var = tk.IntVar(value=48)
         self.power_var = tk.IntVar(value=8)
         self.max_iter_var = tk.IntVar(value=12)
         self.threshold_var = tk.DoubleVar(value=8.0)
+        self.julia_cx = tk.DoubleVar(value=0.355)
+        self.julia_cy = tk.DoubleVar(value=0.355)
+        self.julia_cz = tk.DoubleVar(value=0.355)
 
         row = 0
         tk.Label(self, text="Tipo di frattale volumetrico:").grid(row=row, column=0, sticky="e")
-        self.fractal_types = ["Mandelbulb"]
-        self.fractal_var = tk.StringVar(value=self.fractal_types[0])
-        ttk.Combobox(self, textvariable=self.fractal_var, values=self.fractal_types, state='readonly', width=15).grid(row=row, column=1, sticky="w")
+        ttk.Combobox(self, textvariable=self.fractal_var, values=self.fractal_types, state='readonly', width=18).grid(row=row, column=1, sticky="w")
 
         row += 1
         tk.Label(self, text="Risoluzione N:").grid(row=row, column=0, sticky="e")
         tk.Entry(self, textvariable=self.N_var, width=8).grid(row=row, column=1, sticky="w")
-
-        row += 1
-        tk.Label(self, text="Potenza (power):").grid(row=row, column=0, sticky="e")
-        tk.Entry(self, textvariable=self.power_var, width=8).grid(row=row, column=1, sticky="w")
 
         row += 1
         tk.Label(self, text="Iterazioni massime:").grid(row=row, column=0, sticky="e")
@@ -379,12 +421,44 @@ class VolumetricFractalWindow(tk.Toplevel):
         tk.Entry(self, textvariable=self.threshold_var, width=8).grid(row=row, column=1, sticky="w")
 
         row += 1
-        tk.Label(self, text="Consiglio: N=40-56, power=8, threshold=8, iter=12").grid(row=row, column=0, columnspan=2, pady=10)
+        self.power_row = row
+        tk.Label(self, text="Potenza (solo Mandelbulb):").grid(row=row, column=0, sticky="e")
+        self.power_entry = tk.Entry(self, textvariable=self.power_var, width=8)
+        self.power_entry.grid(row=row, column=1, sticky="w")
+
+        row += 1
+        self.julia_row = row
+        tk.Label(self, text="c Julia (x, y, z):").grid(row=row, column=0, sticky="e")
+        frame_c = tk.Frame(self)
+        frame_c.grid(row=row, column=1, sticky="w")
+        tk.Entry(frame_c, textvariable=self.julia_cx, width=5).pack(side=tk.LEFT)
+        tk.Entry(frame_c, textvariable=self.julia_cy, width=5).pack(side=tk.LEFT)
+        tk.Entry(frame_c, textvariable=self.julia_cz, width=5).pack(side=tk.LEFT)
+
+        row += 1
+        tk.Label(self, text="Consiglio: N=40-56, iter=12, threshold=8").grid(row=row, column=0, columnspan=2, pady=10)
         row += 1
         tk.Button(self, text="Mostra rendering volumetrico", command=self.start_rendering).grid(row=row, column=0, columnspan=2, pady=14)
 
         self.progress = tk.Label(self, text="")
         self.progress.grid(row=row+1, column=0, columnspan=2)
+
+        self.fractal_var.trace_add('write', self.update_fields)
+        self.update_fields()
+
+    def update_fields(self, *args):
+        if self.fractal_var.get() == "Mandelbulb":
+            self.power_entry.config(state="normal")
+            for child in self.grid_slaves(row=self.julia_row):
+                child.config(state="disabled")
+        elif self.fractal_var.get() == "Julia 3D":
+            self.power_entry.config(state="disabled")
+            for child in self.grid_slaves(row=self.julia_row):
+                child.config(state="normal")
+        else:
+            self.power_entry.config(state="disabled")
+            for child in self.grid_slaves(row=self.julia_row):
+                child.config(state="disabled")
 
     def start_rendering(self):
         t = threading.Thread(target=self.render)
@@ -393,33 +467,45 @@ class VolumetricFractalWindow(tk.Toplevel):
     def render(self):
         self.progress.config(text="Calcolo in corso... attendere (può richiedere molto tempo)")
         self.update()
-        fractal = self.fractal_var.get()
+        ftype = self.fractal_var.get()
         N = self.N_var.get()
-        power = self.power_var.get()
         max_iter = self.max_iter_var.get()
         threshold = self.threshold_var.get()
-        if fractal == "Mandelbulb":
+        if ftype == "Mandelbulb":
+            power = self.power_var.get()
             volume = mandelbulb_volume(N=N, power=power, max_iter=max_iter, threshold=threshold)
             xs = np.linspace(-1.3, 1.3, N)
             ys = np.linspace(-1.3, 1.3, N)
             zs = np.linspace(-1.3, 1.3, N)
-            fig = go.Figure(data=go.Volume(
-                x=xs.repeat(N*N),
-                y=np.tile(ys.repeat(N), N),
-                z=np.tile(zs, N*N),
-                value=volume.flatten(),
-                isomin=int(max_iter*0.35), isomax=int(max_iter*0.95),
-                opacity=0.08,
-                surface_count=22,
-                colorscale='magma',
-            ))
-            fig.update_layout(title=f"Mandelbulb volumetrico (N={N}, power={power})")
-            self.progress.config(text="Apro visualizzazione Plotly...")
-            self.update()
-            fig.show()
-            self.progress.config(text="Rendering terminato")
+        elif ftype == "Julia 3D":
+            c = (self.julia_cx.get(), self.julia_cy.get(), self.julia_cz.get())
+            volume = julia3d_volume(N=N, c=c, max_iter=max_iter, threshold=threshold)
+            xs = np.linspace(-1.5, 1.5, N)
+            ys = np.linspace(-1.5, 1.5, N)
+            zs = np.linspace(-1.5, 1.5, N)
+        elif ftype == "Mandelbrot 3D":
+            volume = mandelbrot3d_volume(N=N, max_iter=max_iter, threshold=threshold)
+            xs = np.linspace(-2.0, 1.0, N)
+            ys = np.linspace(-1.5, 1.5, N)
+            zs = np.linspace(-1.5, 1.5, N)
         else:
             messagebox.showerror("Errore", "Tipo di frattale non supportato.")
+            return
+        fig = go.Figure(data=go.Volume(
+            x=xs.repeat(N*N),
+            y=np.tile(ys.repeat(N), N),
+            z=np.tile(zs, N*N),
+            value=volume.flatten(),
+            isomin=int(max_iter*0.35), isomax=int(max_iter*0.95),
+            opacity=0.08,
+            surface_count=22,
+            colorscale='magma',
+        ))
+        fig.update_layout(title=f"{ftype} volumetrico (N={N})")
+        self.progress.config(text="Apro visualizzazione Plotly...")
+        self.update()
+        fig.show()
+        self.progress.config(text="Rendering terminato")
 
 # --- GUI PRINCIPALE ---
 class FractalGUI(tk.Tk):
