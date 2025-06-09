@@ -2,8 +2,10 @@ import numpy as np
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import threading
 
-# --- Funzioni frattali 2D e 1D (come prima, omesse per brevità) ---
+# --- Funzioni frattali 2D e 1D ---
 
 def sierpinski(n_iter=6):
     v = np.array([[0, 0], [1, 0], [0.5, np.sqrt(3)/2]])
@@ -235,7 +237,34 @@ def mandelbulb(N=40, max_iter=10, threshold=8, power=8):
     bulb_points = points[mask]
     return bulb_points
 
-# --- Metodi di stima (come prima, omessi qui per brevità) ---
+def mandelbulb_volume(N=40, power=8, max_iter=12, threshold=8):
+    xs = np.linspace(-1.3, 1.3, N)
+    ys = np.linspace(-1.3, 1.3, N)
+    zs = np.linspace(-1.3, 1.3, N)
+    X, Y, Z = np.meshgrid(xs, ys, zs, indexing='ij')
+    values = np.zeros_like(X, dtype=np.uint8)
+    for i in range(N):
+        for j in range(N):
+            for k in range(N):
+                zx, zy, zz = X[i,j,k], Y[i,j,k], Z[i,j,k]
+                cx, cy, cz = zx, zy, zz
+                for it in range(max_iter):
+                    r = np.sqrt(zx*zx + zy*zy + zz*zz)
+                    theta = np.arctan2(np.sqrt(zx*zx + zy*zy), zz)
+                    phi = np.arctan2(zy, zx)
+                    rn = r**power
+                    thetan = theta * power
+                    phin = phi * power
+                    zx_new = rn * np.sin(thetan) * np.cos(phin) + cx
+                    zy_new = rn * np.sin(thetan) * np.sin(phin) + cy
+                    zz_new = rn * np.cos(thetan) + cz
+                    if zx_new*zx_new + zy_new*zy_new + zz_new*zz_new > threshold:
+                        break
+                    zx, zy, zz = zx_new, zy_new, zz_new
+                values[i,j,k] = it
+    return values
+
+# --- Metodi di stima ---
 
 def box_counting(data, box_sizes, plot=True):
     data = np.asarray(data)
@@ -314,12 +343,90 @@ def variogram_dimension(signal, scales, plot=True):
         plt.show()
     return np.mean(dims) if dims else np.nan
 
-# --- GUI ---
+# --- Pagina Rendering Volumetrico Plotly ---
+class VolumetricFractalWindow(tk.Toplevel):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.title("Rendering Volumetrico Frattale 3D")
+        self.geometry("400x350")
+        self.resizable(False, False)
+
+        self.N_var = tk.IntVar(value=48)
+        self.power_var = tk.IntVar(value=8)
+        self.max_iter_var = tk.IntVar(value=12)
+        self.threshold_var = tk.DoubleVar(value=8.0)
+
+        row = 0
+        tk.Label(self, text="Tipo di frattale volumetrico:").grid(row=row, column=0, sticky="e")
+        self.fractal_types = ["Mandelbulb"]
+        self.fractal_var = tk.StringVar(value=self.fractal_types[0])
+        ttk.Combobox(self, textvariable=self.fractal_var, values=self.fractal_types, state='readonly', width=15).grid(row=row, column=1, sticky="w")
+
+        row += 1
+        tk.Label(self, text="Risoluzione N:").grid(row=row, column=0, sticky="e")
+        tk.Entry(self, textvariable=self.N_var, width=8).grid(row=row, column=1, sticky="w")
+
+        row += 1
+        tk.Label(self, text="Potenza (power):").grid(row=row, column=0, sticky="e")
+        tk.Entry(self, textvariable=self.power_var, width=8).grid(row=row, column=1, sticky="w")
+
+        row += 1
+        tk.Label(self, text="Iterazioni massime:").grid(row=row, column=0, sticky="e")
+        tk.Entry(self, textvariable=self.max_iter_var, width=8).grid(row=row, column=1, sticky="w")
+
+        row += 1
+        tk.Label(self, text="Soglia (threshold):").grid(row=row, column=0, sticky="e")
+        tk.Entry(self, textvariable=self.threshold_var, width=8).grid(row=row, column=1, sticky="w")
+
+        row += 1
+        tk.Label(self, text="Consiglio: N=40-56, power=8, threshold=8, iter=12").grid(row=row, column=0, columnspan=2, pady=10)
+        row += 1
+        tk.Button(self, text="Mostra rendering volumetrico", command=self.start_rendering).grid(row=row, column=0, columnspan=2, pady=14)
+
+        self.progress = tk.Label(self, text="")
+        self.progress.grid(row=row+1, column=0, columnspan=2)
+
+    def start_rendering(self):
+        t = threading.Thread(target=self.render)
+        t.start()
+
+    def render(self):
+        self.progress.config(text="Calcolo in corso... attendere (può richiedere molto tempo)")
+        self.update()
+        fractal = self.fractal_var.get()
+        N = self.N_var.get()
+        power = self.power_var.get()
+        max_iter = self.max_iter_var.get()
+        threshold = self.threshold_var.get()
+        if fractal == "Mandelbulb":
+            volume = mandelbulb_volume(N=N, power=power, max_iter=max_iter, threshold=threshold)
+            xs = np.linspace(-1.3, 1.3, N)
+            ys = np.linspace(-1.3, 1.3, N)
+            zs = np.linspace(-1.3, 1.3, N)
+            fig = go.Figure(data=go.Volume(
+                x=xs.repeat(N*N),
+                y=np.tile(ys.repeat(N), N),
+                z=np.tile(zs, N*N),
+                value=volume.flatten(),
+                isomin=int(max_iter*0.35), isomax=int(max_iter*0.95),
+                opacity=0.08,
+                surface_count=22,
+                colorscale='magma',
+            ))
+            fig.update_layout(title=f"Mandelbulb volumetrico (N={N}, power={power})")
+            self.progress.config(text="Apro visualizzazione Plotly...")
+            self.update()
+            fig.show()
+            self.progress.config(text="Rendering terminato")
+        else:
+            messagebox.showerror("Errore", "Tipo di frattale non supportato.")
+
+# --- GUI PRINCIPALE ---
 class FractalGUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Fractal Dimension Estimator")
-        self.geometry("700x780")
+        self.title("Fractal Dimension Estimator + Rendering Volumetrico")
+        self.geometry("720x800")
         self.resizable(False, False)
 
         self.fractals_2d = [
@@ -384,7 +491,6 @@ class FractalGUI(tk.Tk):
         self.n3d_entry = tk.Entry(frame3d, textvariable=self.n3d_var, width=10)
         self.n3d_entry.grid(row=1, column=1, sticky="w")
 
-        # Parametri Julia 3D e Mandelbrot 3D e Mandelbulb (usano la stessa griglia e parametri)
         tk.Label(frame3d, text="N grid (Julia/Mandelbrot/Bulb)").grid(row=2, column=0, sticky="e")
         self.juliaN_var = tk.IntVar(value=48)
         tk.Entry(frame3d, textvariable=self.juliaN_var, width=10).grid(row=2, column=1, sticky="w")
@@ -427,16 +533,22 @@ class FractalGUI(tk.Tk):
         )
         tk.Label(frame3d, text=tips, justify="left", font=("Arial", 9), fg="brown").grid(row=10, column=0, columnspan=2, pady=12)
 
-        tk.Label(self, text="Copilot | 2024", font=("Arial", 9, "italic")).place(x=570, y=750)
+        # --- Bottone Rendering Volumetrico ---
+        tk.Button(self, text="Rendering Volumetrico 3D (Plotly)", font=("Arial", 12, "bold"),
+                  command=self.open_volumetric_window, bg="#d5e8d4").place(x=230, y=570, width=260, height=40)
+
+        tk.Label(self, text="Copilot | 2024", font=("Arial", 9, "italic")).place(x=570, y=770)
 
         # --- Stato ---
         self.last_data_2d = None
         self.last_type_2d = None
         self.fractal_fig_2d = None
         self.dimension_fig_2d = None
-
         self.last_data_3d = None
         self.fractal_fig_3d = None
+
+    def open_volumetric_window(self):
+        VolumetricFractalWindow(self)
 
     # --- 2D/1D ---
     def generate_fractal_2d(self):
