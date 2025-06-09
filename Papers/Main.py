@@ -1,153 +1,282 @@
 import numpy as np
-import streamlit as st
-from scipy.integrate import solve_ivp
-from scipy.spatial.distance import pdist, squareform
 import matplotlib.pyplot as plt
 
+# --- Stima dimensione frattale: funzioni ---
 
-# Sistema di Lorenz
-def lorenz(t, state, sigma=10.0, rho=28.0, beta=8.0/3.0):
-    x, y, z = state
-    dxdt = sigma * (y - x)
-    dydt = x * (rho - z) - y
-    dzdt = x * y - beta * z
-    return [dxdt, dydt, dzdt]
-
-
-def box_counting(data2d, epsilons):
+def box_counting(data, box_sizes, plot=True):
+    """Stima la dimensione frattale con box-counting e mostra il plot."""
+    data = np.asarray(data)
+    if data.ndim == 1:
+        data = data.reshape(-1,1)
+    N_dim = data.shape[1]
     counts = []
-    for eps in epsilons:
-        # Normalizza i dati in [0, 1]
-        norm_data = (data2d - data2d.min(axis=0)) / (data2d.max(axis=0) - data2d.min(axis=0))
-        # Griglia
-        grid = np.floor(norm_data / eps).astype(int)
-        # Conta box unici
-        unique_boxes = set(map(tuple, grid))
-        counts.append(len(unique_boxes))
-    return counts
+    for size in box_sizes:
+        bins = [np.arange(np.min(data[:, dim]), np.max(data[:, dim]) + size, size) for dim in range(N_dim)]
+        hist, _ = np.histogramdd(data, bins=bins)
+        counts.append(np.sum(hist > 0))
+    log_inv_box_sizes = np.log(1/np.array(box_sizes))
+    log_counts = np.log(counts)
+    coeffs = np.polyfit(log_inv_box_sizes, log_counts, 1)
+    D = coeffs[0]
+    if plot:
+        plt.figure()
+        plt.plot(log_inv_box_sizes, log_counts, 'o-', label='Data')
+        plt.plot(log_inv_box_sizes, np.polyval(coeffs, log_inv_box_sizes), '--', label=f'Fit: slope={D:.3f}')
+        plt.xlabel('log(1/box size)')
+        plt.ylabel('log(N box)')
+        plt.legend()
+        plt.title('Box-counting plot')
+        plt.show()
+    return D
 
-from scipy.spatial.distance import pdist, squareform
-
-def correlation_dimension(data, radii):
+def correlation_dimension(data, r_vals, plot=True):
+    """Stima la correlation dimension (Grassberger-Procaccia) e mostra il plot."""
+    data = np.asarray(data)
+    dists = np.linalg.norm(data[:, np.newaxis] - data[np.newaxis, :], axis=-1)
     N = len(data)
-    dists = squareform(pdist(data))
-    np.fill_diagonal(dists, np.inf)  # evita distanze 0 con se stessi
+    C = []
+    for r in r_vals:
+        C.append(np.sum(dists < r) / (N * (N - 1)))
+    log_r = np.log(r_vals)
+    log_C = np.log(C)
+    coeffs = np.polyfit(log_r, log_C, 1)
+    D = coeffs[0]
+    if plot:
+        plt.figure()
+        plt.plot(log_r, log_C, 'o-', label='Data')
+        plt.plot(log_r, np.polyval(coeffs, log_r), '--', label=f'Fit: slope={D:.3f}')
+        plt.xlabel('log(r)')
+        plt.ylabel('log(C(r))')
+        plt.legend()
+        plt.title('Correlation dimension plot')
+        plt.show()
+    return D
 
-    C_r = []
-    for r in radii:
-        C = np.sum(dists < r) / (N * (N - 1))
-        C_r.append(C)
-    return np.log(radii), np.log(C_r)
+def information_dimension(data, box_sizes, plot=True):
+    """Stima la information dimension (D1) e mostra il plot."""
+    data = np.asarray(data)
+    if data.ndim == 1:
+        data = data.reshape(-1,1)
+    N_dim = data.shape[1]
+    S_list = []
+    log_inv_box_sizes = []
+    for size in box_sizes:
+        bins = [np.arange(np.min(data[:, dim]), np.max(data[:, dim]) + size, size) for dim in range(N_dim)]
+        hist, _ = np.histogramdd(data, bins=bins)
+        p = hist.flatten() / np.sum(hist)
+        p = p[p > 0]
+        S = -np.sum(p * np.log(p))
+        S_list.append(S)
+        log_inv_box_sizes.append(np.log(1/size))
+    S_list = np.array(S_list)
+    log_inv_box_sizes = np.array(log_inv_box_sizes)
+    coeffs = np.polyfit(log_inv_box_sizes, S_list, 1)
+    D1 = coeffs[0]
+    if plot:
+        plt.figure()
+        plt.plot(log_inv_box_sizes, S_list, 'o-', label='Data')
+        plt.plot(log_inv_box_sizes, np.polyval(coeffs, log_inv_box_sizes), '--', label=f'Fit: slope={D1:.3f}')
+        plt.xlabel('log(1/box size)')
+        plt.ylabel('Shannon entropy S')
+        plt.legend()
+        plt.title('Information dimension plot')
+        plt.show()
+    return D1
 
+def generalized_dimension(data, box_sizes, q=2, plot=True):
+    """Stima la generalized dimension (Renyi, multifractal, Dq) e mostra il plot."""
+    data = np.asarray(data)
+    if data.ndim == 1:
+        data = data.reshape(-1,1)
+    N_dim = data.shape[1]
+    Sq_list = []
+    log_box_sizes = []
+    for size in box_sizes:
+        bins = [np.arange(np.min(data[:, dim]), np.max(data[:, dim]) + size, size) for dim in range(N_dim)]
+        hist, _ = np.histogramdd(data, bins=bins)
+        p = hist.flatten() / np.sum(hist)
+        p = p[p > 0]
+        if q == 1:
+            S = -np.sum(p * np.log(p))
+        else:
+            S = np.sum(p ** q)
+        Sq_list.append(S)
+        log_box_sizes.append(np.log(size))
+    Sq_list = np.array(Sq_list)
+    log_box_sizes = np.array(log_box_sizes)
+    if q == 1:
+        coeffs = np.polyfit(log_box_sizes, Sq_list, 1)
+        Dq = coeffs[0]
+    else:
+        coeffs = np.polyfit(log_box_sizes, np.log(Sq_list), 1)
+        Dq = coeffs[0] / (q - 1)
+    if plot:
+        plt.figure()
+        if q == 1:
+            plt.plot(log_box_sizes, Sq_list, 'o-', label='Data')
+            plt.plot(log_box_sizes, np.polyval(coeffs, log_box_sizes), '--', label=f'Fit: slope={Dq:.3f}')
+        else:
+            plt.plot(log_box_sizes, np.log(Sq_list), 'o-', label='Data')
+            plt.plot(log_box_sizes, np.polyval(coeffs, log_box_sizes), '--', label=f'Fit: slope={Dq:.3f}')
+        plt.xlabel('log(box size)')
+        plt.ylabel(f'log(∑p^{q})' if q != 1 else 'Shannon entropy S')
+        plt.legend()
+        plt.title(f'Generalized dimension D{q} plot')
+        plt.show()
+    return Dq
 
+def plot_multifractal_spectrum(data, box_sizes, q_list):
+    """Plot multifractal scaling: log(∑p^q) vs log(box size) for several q."""
+    data = np.asarray(data)
+    if data.ndim == 1:
+        data = data.reshape(-1,1)
+    N_dim = data.shape[1]
+    plt.figure()
+    for q in q_list:
+        Sq_list = []
+        log_box_sizes = []
+        for size in box_sizes:
+            bins = [np.arange(np.min(data[:, dim]), np.max(data[:, dim]) + size, size) for dim in range(N_dim)]
+            hist, _ = np.histogramdd(data, bins=bins)
+            p = hist.flatten() / np.sum(hist)
+            p = p[p > 0]
+            if q == 1:
+                S = -np.sum(p * np.log(p))
+            else:
+                S = np.sum(p ** q)
+            Sq_list.append(S)
+            log_box_sizes.append(np.log(size))
+        if q == 1:
+            plt.plot(log_box_sizes, Sq_list, 'o-', label=f'q={q}')
+        else:
+            plt.plot(log_box_sizes, np.log(Sq_list), 'o-', label=f'q={q}')
+    plt.xlabel('log(box size)')
+    plt.ylabel('log(∑p^q) / S(q=1)')
+    plt.legend()
+    plt.title('Multifractal spectrum')
+    plt.show()
 
-st.title("Stima della Dimensione Frattale")
-
-# Lorenz system
-def lorenz(t, state, sigma=10.0, rho=28.0, beta=8.0/3.0):
-    x, y, z = state
-    return [sigma*(y - x), x*(rho - z) - y, x*y - beta*z]
-
-# Simula l'attrattore
-@st.cache_data
-def generate_lorenz():
-    t_eval = np.linspace(0, 40, 5000)
-    sol = solve_ivp(lorenz, [0, 40], [1, 1, 1], t_eval=t_eval)
-    return sol.y.T
-
-data = generate_lorenz()
-data2d = data[:, :2]
-
-st.subheader("Visualizzazione dell'Attrattore")
-fig = plt.figure()
-plt.plot(data2d[:, 0], data2d[:, 1], lw=0.5)
-plt.xlabel("x")
-plt.ylabel("y")
-st.pyplot(fig)
-
-# Box-Counting
-def box_counting(data2d, epsilons):
-    counts = []
-    for eps in epsilons:
-        norm_data = (data2d - data2d.min(axis=0)) / (data2d.max(axis=0) - data2d.min(axis=0))
-        grid = np.floor(norm_data / eps).astype(int)
-        unique_boxes = set(map(tuple, grid))
-        counts.append(len(unique_boxes))
-    return counts
-
-st.subheader("Box-Counting Dimension")
-
-epsilons = np.logspace(-2, 0, 20)
-counts = box_counting(data2d, epsilons)
-log_eps = np.log(1/epsilons)
-log_counts = np.log(counts)
-slope_box, _ = np.polyfit(log_eps, log_counts, 1)
-
-fig2 = plt.figure()
-plt.plot(log_eps, log_counts, 'o-')
-plt.title(f"Box-Counting (D ≈ {slope_box:.2f})")
-plt.xlabel("log(1/ε)")
-plt.ylabel("log(N(ε))")
-st.pyplot(fig2)
-
-# Grassberger–Procaccia
-def correlation_dimension(data, radii):
-    N = len(data)
+def nearest_neighbor_dimension(data, k=1):
+    """Stima la dimensione frattale tramite nearest-neighbor (dimensione di Grassberger)."""
+    data = np.asarray(data)
+    from scipy.spatial.distance import pdist, squareform
     dists = squareform(pdist(data))
     np.fill_diagonal(dists, np.inf)
-    C_r = [np.sum(dists < r) / (N * (N - 1)) for r in radii]
-    return np.log(radii), np.log(C_r)
+    r = np.min(dists, axis=1) if k == 1 else np.partition(dists, k, axis=1)[:,k]
+    mean_log_r = np.mean(np.log(r))
+    estimator = -1 / mean_log_r
+    return estimator
 
-st.subheader("Correlation Dimension")
+def variogram_dimension(signal, scales, plot=True):
+    """Stima con il variogramma/madogramma e mostra il plot (solo segnali 1D)."""
+    dims = []
+    log_scales = []
+    log_V = []
+    signal = np.asarray(signal)
+    for h in scales:
+        if h <= 1:
+            continue  # evita divisione per zero
+        diffs = signal[h:] - signal[:-h]
+        V = np.mean(np.abs(diffs))
+        if V <= 0:
+            continue  # evita log(0)
+        dims.append(np.log(V) / np.log(h))
+        log_scales.append(np.log(h))
+        log_V.append(np.log(V))
+    if plot and len(log_scales) > 1:
+        coeffs = np.polyfit(log_scales, log_V, 1)
+        plt.figure()
+        plt.plot(log_scales, log_V, 'o-', label='Data')
+        plt.plot(log_scales, np.polyval(coeffs, log_scales), '--', label=f'Fit: slope={coeffs[0]:.3f}')
+        plt.xlabel('log(h)')
+        plt.ylabel('log(V(h))')
+        plt.legend()
+        plt.title('Variogram plot')
+        plt.show()
+    return np.mean(dims) if dims else np.nan
+# --- Funzioni per generare dati frattali noti ---
 
-radii = np.logspace(-2, -0.5, 20)
-log_r, log_C = correlation_dimension(data2d, radii)
-slope_corr, _ = np.polyfit(log_r, log_C, 1)
+def sierpinski(n_iter=6):
+    """Restituisce punti del triangolo di Sierpinski"""
+    # Vertici del triangolo
+    v = np.array([[0, 0], [1, 0], [0.5, np.sqrt(3)/2]])
+    x = np.array([0.0, 0.0])
+    points = [x]
+    for _ in range(3**n_iter):
+        vertex = v[np.random.randint(0, 3)]
+        x = (x + vertex) / 2
+        points.append(x)
+    return np.array(points)
 
-fig3 = plt.figure()
-plt.plot(log_r, log_C, 'o-')
-plt.title(f"Correlation Dimension (D₂ ≈ {slope_corr:.2f})")
-plt.xlabel("log(r)")
-plt.ylabel("log(C(r))")
-st.pyplot(fig3)
+def cantor_set(n_iter=10):
+    """Restituisce punti del set di Cantor su [0,1]"""
+    intervals = [[0.0, 1.0]]
+    for _ in range(n_iter):
+        new_intervals = []
+        for a, b in intervals:
+            third = (b - a) / 3
+            new_intervals.append([a, a + third])
+            new_intervals.append([b - third, b])
+        intervals = new_intervals
+    points = []
+    for a, b in intervals:
+        points.append((a + b)/2)
+    return np.array(points).reshape(-1, 1)
 
+def brownian_motion(n=1000):
+    """Restituisce una traiettoria di moto browniano 1D"""
+    return np.cumsum(np.random.randn(n))
 
-# Parametri di integrazione
-t_span = (0, 40)
-t_eval = np.linspace(t_span[0], t_span[1], 10000)
-initial_state = [1.0, 1.0, 1.0]
+def square_grid(n=32):
+    """Restituisce punti su una griglia quadrata piena (dimensione 2)"""
+    x = np.linspace(0, 1, n)
+    y = np.linspace(0, 1, n)
+    X, Y = np.meshgrid(x, y)
+    return np.vstack([X.ravel(), Y.ravel()]).T
 
-# Risolvi ODE
-sol = solve_ivp(lorenz, t_span, initial_state, t_eval=t_eval)
-points = sol.y.T  # shape (10000, 3)
+# --- MAIN ---
 
-# Plot 3D
-fig = plt.figure(figsize=(8, 6))
-ax = fig.add_subplot(111, projection='3d')
-ax.plot(*points.T, lw=0.5)
-ax.set_title("Attrattore di Lorenz")
-plt.show()
+if __name__ == "__main__":
+    np.random.seed(42)
+    box_sizes = np.logspace(-2, -0.5, 10)
+    r_vals = np.logspace(-2, -0.5, 10)
+    scales = np.arange(2, 20)
+    q_list = [0, 1, 2]
 
+    # 1. Sierpinski triangle (dimensione teorica ~1.585)
+    print("\n=== Sierpinski Triangle ===")
+    data_sierpinski = sierpinski(n_iter=6)
+    D_box = box_counting(data_sierpinski, box_sizes, plot=True)
+    print(f"Box-counting dimension (Sierpinski): {D_box:.3f}")
 
-# Proiezione in 2D
-data2d = points[:, :2]  # Usa x e y
+    # 2. Cantor set (dimensione teorica ~0.6309)
+    print("\n=== Cantor Set ===")
+    data_cantor = cantor_set(n_iter=8)
+    D_box = box_counting(data_cantor, box_sizes, plot=True)
+    print(f"Box-counting dimension (Cantor set): {D_box:.3f}")
 
-# Scelte di epsilon (dimensione dei box)
-epsilons = np.logspace(-2, 0, num=20, base=10.0)
-counts = box_counting(data2d, epsilons)
+    # 3. Brownian motion (fronte, dimensione teorica 1.5)
+    print("\n=== Brownian Motion (1D) ===")
+    signal_brown = brownian_motion(n=2000)
+    D_vario = variogram_dimension(signal_brown, scales, plot=True)
+    print(f"Variogram dimension (Brownian): {D_vario:.3f}")
 
-# Plot log-log
-log_eps = np.log(1/epsilons)
-log_counts = np.log(counts)
+    # 4. Square grid piena (dimensione teorica 2)
+    print("\n=== Square Grid (2D full) ===")
+    data_grid = square_grid(n=32)
+    D_box = box_counting(data_grid, box_sizes, plot=True)
+    print(f"Box-counting dimension (Square grid): {D_box:.3f}")
 
-# Fit lineare
-slope, _ = np.polyfit(log_eps, log_counts, 1)
+    # 5. Dati randomici 2D (già visti)
+    print("\n=== 2D Random Points ===")
+    data_2d = np.random.rand(1000, 2)
+    D_box = box_counting(data_2d, box_sizes, plot=True)
+    print(f"Box-counting dimension (Random 2D): {D_box:.3f}")
 
-plt.figure(figsize=(6, 4))
-plt.plot(log_eps, log_counts, 'o-', label=f"Stima D ≈ {slope:.2f}")
-plt.xlabel("log(1/ε)")
-plt.ylabel("log(N(ε))")
-plt.title("Box-Counting Dimension Estimate (XY projection)")
-plt.legend()
-plt.grid(True)
-plt.show()
+    # 6. Dati randomici 1D (rumore bianco, dimensione ~1)
+    print("\n=== 1D Random Noise ===")
+    signal_1d = np.random.rand(2000)
+    D_vario = variogram_dimension(signal_1d, scales, plot=True)
+    print(f"Variogram dimension (Random 1D): {D_vario:.3f}")
+
+    # Puoi aggiungere altri esempi o calcolare anche le altre dimensioni come sopra!
