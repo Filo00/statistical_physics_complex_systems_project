@@ -1,0 +1,55 @@
+Parametri principali nella generazione 1D/2D
+1. N points / iter
+
+    Cosa rappresenta:
+    Il numero di punti che verranno generati per il frattale (o il numero di iterazioni nel processo).
+    Effetto pratico:
+    Più punti = il frattale apparirà più dettagliato e la stima della dimensione sarà più precisa.
+    Attenzione: per certi frattali (ad es. Sierpinski), il numero effettivo di punti dipende da come è costruito (in base agli step di iterazione).
+    Esempio:
+    N = 1000 (veloce, poco dettaglio), N = 10000 (più lento, molto dettaglio).
+
+2. Estimation method
+
+    Cosa rappresenta:
+    Scegli quale metodo di stima usare per calcolare la dimensione frattale:
+        Box-counting: Conta quante “scatole” diverse servono per coprire il frattale a diverse scale.
+        Correlation dimension: Basato sulle distanze tra tutti i punti del frattale.
+        Variogram (1D): Usato per segnali 1D, misura la “rugosità” a diverse scale.
+    Effetto pratico:
+    Scegli il metodo più adatto al tipo di frattale (Box-counting e Correlation per 2D; Variogram per 1D).
+
+3. Min scale
+
+    Cosa rappresenta:
+    La scala minima (ossia la dimensione minima delle scatole, o il raggio minimo per la stima) usata nella stima frattale.
+    Effetto pratico:
+    Più piccola = si esplora la struttura a scala più fine, ma attenzione a non esagerare (rumore numerico o pochi punti).
+    Esempio:
+    Min scale = 0.01
+
+4. Max scale
+
+    Cosa rappresenta:
+    La scala massima usata per la stima frattale.
+    Effetto pratico:
+    Più grande = si esplora la struttura a scala più grossolana, ma se troppo grande rischi di non vedere la struttura frattale.
+    Esempio:
+    Max scale = 0.3
+
+5. N scales
+
+    Cosa rappresenta:
+    Il numero di scale (passi) su cui viene fatta la stima (cioè quante volte si cambia la dimensione delle scatole o il raggio).
+    Effetto pratico:
+    Più scale = la curva di stima sarà più liscia e affidabile, ma la stima sarà più lenta.
+    Esempio:
+    N scales = 10 (tipico), 20 (più preciso).
+
+In sintesi
+
+    N points / iter: Quanti punti nel frattale (più = meglio, ma più lento).
+    Estimation method: Scegli il metodo di stima della dimensione frattale.
+    Min scale / Max scale: Range delle scale su cui si calcola la dimensione frattale.
+    N scales: Quante scale intermedie valutare.
+

@@ -1,0 +1,56 @@
+Parametri principali
+1. N (Risoluzione della griglia)
+
+    Cosa rappresenta:
+    Il numero di punti per asse nella griglia 3D (x, y, z) su cui viene calcolato il frattale.
+    Effetto pratico:
+    Più alto è N, più dettagliata e “liscia” sarà la visualizzazione, ma aumenta molto il tempo di calcolo e la quantità di memoria usata (crescita cubica: N³).
+    Esempio:
+    N=40 (veloce, pochi dettagli), N=56 (molto dettagliato, più lento).
+
+2. max_iter (Iterazioni massime)
+
+    Cosa rappresenta:
+    Quante volte viene applicata la formula frattale per ogni punto della griglia prima di decidere se “diverge” o no.
+    Effetto pratico:
+    Più iterazioni = puoi vedere meglio le regioni sottili del frattale, ma la generazione è più lenta.
+    Esempio:
+    max_iter=12 (veloce, dettagli medi), max_iter=20 (più dettagli, più lento).
+
+3. threshold (Soglia di divergenza)
+
+    Cosa rappresenta:
+    Se la norma (modulo quadrato) della posizione frattale supera questo valore durante le iterazioni, il punto si considera “uscito” dal frattale.
+    Effetto pratico:
+    Valori bassi = frattale “più piccolo”; valori alti = frattale “più grande”.
+    Tipicamente 4–8 sono valori standard per Mandelbrot/Julia, 8 per Mandelbulb.
+    Esempio:
+    threshold=8 (classico per Mandelbulb), threshold=4 (classico per Mandelbrot/Julia).
+
+4. power (Solo Mandelbulb)
+
+    Cosa rappresenta:
+    L’esponente usato nella formula Mandelbulb (generalizza la potenza z^n del Mandelbrot in 3D).
+    Effetto pratico:
+    Power=8 è la versione “classica” e dà la tipica forma a bulbo. Power più alto o più basso cambia la simmetria (bulbi più o meno appuntiti, più o meno “stellari”).
+    Esempio:
+    power=8 (simmetria a 8 punte, classico), power=4 (simmetria a 4 punte, più arrotondato).
+
+5. c Julia (x, y, z) (Solo Julia 3D)
+
+    Cosa rappresenta:
+    È il vettore costante aggiunto ad ogni iterazione nella formula della Julia 3D.
+    Cambiando questi valori, cambi completamente la “forma” e la struttura interna del frattale Julia.
+    Effetto pratico:
+    Diversi valori di c danno frattali molto diversi tra loro (alcuni possono essere molto “vuoti”, altri molto pieni).
+    Esempio:
+    c = (0.355, 0.355, 0.355) (valore tipico per vedere una struttura Julia interessante)
+
+In sintesi
+
+    N: più alto = più dettagli, ma più lento.
+    max_iter: più alto = più dettagli, ma più lento.
+    threshold: regola la “dimensione” e la sensibilità della divergenza.
+    power: (solo Mandelbulb) cambia la simmetria/forma globale.
+    c: (solo Julia 3D) cambia la struttura interna del frattale.
+
