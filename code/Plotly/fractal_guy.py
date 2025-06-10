@@ -7,39 +7,6 @@ import threading
 
 # --- Funzioni frattali 2D e 1D ---
 
-def sierpinski(n_iter=6):
-    v = np.array([[0, 0], [1, 0], [0.5, np.sqrt(3)/2]])
-    x = np.array([0.0, 0.0])
-    points = [x]
-    for _ in range(3**n_iter):
-        vertex = v[np.random.randint(0, 3)]
-        x = (x + vertex) / 2
-        points.append(x)
-    return np.array(points)
-
-def cantor_set(n_iter=10):
-    intervals = [[0.0, 1.0]]
-    for _ in range(n_iter):
-        new_intervals = []
-        for a, b in intervals:
-            third = (b - a) / 3
-            new_intervals.append([a, a + third])
-            new_intervals.append([b - third, b])
-        intervals = new_intervals
-    points = []
-    for a, b in intervals:
-        points.append((a + b)/2)
-    return np.array(points).reshape(-1, 1)
-
-def brownian_motion(n=1000):
-    return np.cumsum(np.random.randn(n))
-
-def square_grid(n=32):
-    x = np.linspace(0, 1, n)
-    y = np.linspace(0, 1, n)
-    X, Y = np.meshgrid(x, y)
-    return np.vstack([X.ravel(), Y.ravel()]).T
-
 def sierpinski_carpet(n_iter=4):
     points = []
     def carpet(x, y, size, iter):
